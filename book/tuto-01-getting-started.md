@@ -34,8 +34,8 @@ The first step when creating a graphical application is to create a window. If y
 
 Initializing an OpenGL window with glutin can be done using the following steps:
 
-1. Creating an `EventsLoop` for handling window and device events.
-2. Specify Window parameters using `glium::glutin::WindowBuilder::new()`. These
+1. Creating an `EventLoop` for handling window and device events.
+2. Specify Window parameters using `glium::glutin::window::WindowBuilder::new()`. These
    are window-specific attributes that have nothing to do with OpenGL.
 3. Specify Context parameters using `glium::glutin::ContextBuilder::new()`.
    Here we specify OpenGL-specific attributes like multisampling or vsync.
@@ -48,8 +48,8 @@ Initializing an OpenGL window with glutin can be done using the following steps:
 fn main() {
     use glium::glutin;
 
-    let mut events_loop = glutin::EventsLoop::new();
-    let wb = glutin::WindowBuilder::new();
+    let events_loop = glutin::event_loop::EventLoop::new();
+    let wb = glutin::window::WindowBuilder::new();
     let cb = glutin::ContextBuilder::new();
     let display = glium::Display::new(wb, cb, &events_loop).unwrap();
 }
@@ -58,19 +58,22 @@ fn main() {
 But there is a problem: as soon as the window has been created, our main function exits and `display`'s destructor closes the window. To prevent this, we need to loop forever until we detect that a `CloseRequested` event has been received:
 
 ```rust
-let mut closed = false;
-while !closed {
-    // listing the events produced by application and waiting to be received
-    events_loop.poll_events(|ev| {
-        match ev {
-            glutin::Event::WindowEvent { event, .. } => match event {
-                glutin::WindowEvent::CloseRequested => closed = true,
-                _ => (),
+fn main() {
+    use glium::glutin;
+    use glium::event;
+    use glium::event_loop::ControlFlow;
+
+    // Previous setup skipped ...
+
+    events_loop.run(move |event, _, control_flow| {
+        *control_flow = match event {
+            event::Event::WindowEvent { event, ..} => match event {
+                event::WindowEvent::CloseRequested => ControlFlow::Exit,
+                _ => ControlFlow::Poll,
             },
-            _ => (),
+            _ => ControlFlow::Poll,
         }
     });
-}
 ```
 
 Right now this code will consume 100% of our CPU, but that will do for now. In a real application you should either use vertical synchronization or sleep for a few milliseconds at the end of the loop, but that is a more advanced topic.
@@ -116,28 +119,27 @@ Here is our full `main` function after this step:
 
 ```rust
 fn main() {
-    use glium::{glutin, Surface};
-
-    let mut events_loop = glium::glutin::EventsLoop::new();
-    let wb = glium::glutin::WindowBuilder::new();
-    let cb = glium::glutin::ContextBuilder::new();
-    let display = glium::Display::new(wb, cb, &events_loop).unwrap();
-
-    let mut closed = false;
-    while !closed {
-        let mut target = display.draw();
-        target.clear_color(0.0, 0.0, 1.0, 1.0);
-        target.finish().unwrap();
-
-        events_loop.poll_events(|ev| {
-            match ev {
-                glutin::Event::WindowEvent { event, .. } => match event {
-                    glutin::WindowEvent::CloseRequested => closed = true,
-                    _ => (),
-                },
-                _ => (),
-            }
-        });
-    }
+     use glium::{glutin, Surface};
+     use glutin::event;
+     use glutin::event_loop::ControlFlow;
+ 
+     let events_loop = glutin::event_loop::EventLoop::new();
+     let wb = glutin::window::WindowBuilder::new();
+     let cb = glutin::ContextBuilder::new();
+     let display = glium::Display::new(wb, cb, &events_loop).unwrap();
+ 
+     events_loop.run(move |event, _, control_flow| {
+         let mut target = display.draw();
+         target.clear_color(0.2, 0.4, 0.8, 1.0);
+         target.finish().unwrap();
+ 
+         *control_flow = match event {
+             event::Event::WindowEvent { event, ..} => match event {
+                 event::WindowEvent::CloseRequested => ControlFlow::Exit,
+                 _ => ControlFlow::Poll,
+             },
+             _ => ControlFlow::Poll,
+         }
+     });
 }
 ```
